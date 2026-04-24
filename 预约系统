@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CD/CPL设备预约系统</title>
+    <style>
+        *{box-sizing:border-box}
+        body{background:#f8f9fa;padding:20px;font-family:微软雅黑}
+        .container{max-width:1000px;margin:auto}
+        .card{background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+        .btn{padding:10px 15px;background:#0d6efd;color:white;border:none;border-radius:6px;cursor:pointer}
+        .btn-danger{background:#dc3545}
+        .time-bar{height:60px;background:#28a745;border-radius:6px;position:relative;overflow:hidden}
+        .booked-block{position:absolute;height:100%;background:#dc3545;color:white;font-size:12px;display:flex;align-items:center;padding:0 8px}
+        .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+        input{padding:10px;border:1px solid #ddd;border-radius:6px;width:100%;margin:5px 0}
+        .item{padding:10px;background:#f8f9fa;border-left:4px solid #dc3545;margin:8px 0;border-radius:6px}
+        .stat-item{padding:10px;background:#e9f7fe;border-left:4px solid #0d6efd;margin:8px 0;border-radius:6px}
+        .title{text-align:center;margin:15px 0}
+        .device-box{display:flex;gap:20px;justify-content:center;margin-bottom:20px}
+        .device-btn{padding:15px 30px;background:#198754;color:white;border:none;border-radius:8px;cursor:pointer;font-size:16px}
+        .active{background:#0d6efd}
+        .back{margin-bottom:15px}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="device-box">
+        <button class="device-btn" id="btnCD" onclick="setDevice('CD')">CD 设备</button>
+        <button class="device-btn" id="btnCPL" onclick="setDevice('CPL')">CPL 设备</button>
+    </div>
+
+    <div class="card">
+        <h4>预约信息</h4>
+        <input type="date" id="selDate" onchange="refreshAll()">
+        <div class="grid">
+            <input type="number" id="h1" placeholder="时" value="9">
+            <input type="number" id="m1" placeholder="分" value="0">
+            <input type="number" id="s1" placeholder="秒" value="0">
+        </div>
+        <div class="grid">
+            <input type="number" id="h2" placeholder="时" value="10">
+            <input type="number" id="m2" placeholder="分" value="0">
+            <input type="number" id="s2" placeholder="秒" value="0">
+        </div>
+        <input type="text" id="userName" placeholder="输入姓名">
+        <button class="btn w-100" onclick="submitBook()">确认预约</button>
+    </div>
+
+    <div class="card">
+        <h4>时间状态条（绿=可约 红=已约）</h4>
+        <div id="timeBar" class="time-bar"></div>
+    </div>
+
+    <div class="card">
+        <h4>当天预约记录</h4>
+        <div id="recordList"></div>
+    </div>
+
+    <div class="card">
+        <h4>总时长统计</h4>
+        <div id="statResult"></div>
+    </div>
+</div>
+
+<script>
+let device = "";
+let bookingData = { CD: {}, CPL: {} };
+const today = new Date().toISOString().split("T")[0];
+
+function setDevice(dev) {
+    device = dev;
+    document.getElementById("btnCD").classList.remove("active");
+    document.getElementById("btnCPL").classList.remove("active");
+    document.getElementById("btn"+dev).classList.add("active");
+    document.getElementById("selDate").value = today;
+    refreshAll();
+}
+
+function fmt(n) { return n.toString().padStart(2, "0"); }
+function timeStr(h,m,s) { return fmt(h)+":"+fmt(m)+":"+fmt(s); }
+function toSec(h,m,s) { return h*3600 + m*60 + s; }
+function secToHMS(sec) {
+    const h = Math.floor(sec/3600);
+    const m = Math.floor((sec%3600)/60);
+    const s = sec%60;
+    return fmt(h)+":"+fmt(m)+":"+fmt(s);
+}
+
+function submitBook() {
+    if (!device) { alert("请选择设备"); return; }
+    const dt = document.getElementById("selDate").value;
+    const h1=+document.getElementById("h1").value||0;
+    const m1=+document.getElementById("m1").value||0;
+    const s1=+document.getElementById("s1").value||0;
+    const h2=+document.getElementById("h2").value||0;
+    const m2=+document.getElementById("m2").value||0;
+    const s2=+document.getElementById("s2").value||0;
+    const name = document.getElementById("userName").value.trim();
+
+    if (!name || !dt) { alert("请填写完整"); return; }
+    const t1 = toSec(h1,m1,s1);
+    const t2 = toSec(h2,m2,s2);
+    if (t1 >= t2) { alert("时间错误"); return; }
+
+    const key = timeStr(h1,m1,s1) + "-" + timeStr(h2,m2,s2);
+    if (!bookingData[device][dt]) bookingData[device][dt] = {};
+    bookingData[device][dt][key] = name;
+
+    document.getElementById("userName").value = "";
+    refreshAll();
+}
+
+function refreshAll() {
+    if (!device) return;
+    const dt = document.getElementById("selDate").value;
+    const data = bookingData[device][dt] || {};
+
+    const bar = document.getElementById("timeBar");
+    const list = document.getElementById("recordList");
+    bar.innerHTML = "";
+    list.innerHTML = "";
+
+    for (let k in data) {
+        const [a,b] = k.split("-");
+        const as = toSec(...a.split(":"));
+        const es = toSec(...b.split(":"));
+        const dur = secToHMS(es - as);
+
+        const block = document.createElement("div");
+        block.className = "booked-block";
+        block.style.left = (as/86400*100)+"%";
+        block.style.width = ((es-as)/86400*100)+"%";
+        block.innerText = k + " " + data[k];
+        bar.appendChild(block);
+
+        const item = document.createElement("div");
+        item.className = "item";
+        item.innerText = `${dt} | ${k} | ${data[k]} | 时长：${dur}`;
+        list.appendChild(item);
+    }
+
+    refreshStats();
+}
+
+function refreshStats() {
+    if (!device) return;
+    const data = bookingData[device];
+    let user = {}, total = 0;
+    const res = document.getElementById("statResult");
+    res.innerHTML = "";
+
+    for (let dt in data) {
+        for (let k in data[dt]) {
+            const name = data[dt][k];
+            const [a,b] = k.split("-");
+            const diff = toSec(...b.split(":")) - toSec(...a.split(":"));
+            user[name] = (user[name] || 0) + diff;
+            total += diff;
+        }
+    }
+
+    for (let n in user) {
+        const div = document.createElement("div");
+        div.className = "stat-item";
+        div.innerText = `${n}：${secToHMS(user[n])}`;
+        res.appendChild(div);
+    }
+
+    const totalDiv = document.createElement("div");
+    totalDiv.className = "stat-item";
+    totalDiv.style.fontWeight="bold";
+    totalDiv.innerText = `总预约时长：${secToHMS(total)}`;
+    res.appendChild(totalDiv);
+}
+</script>
+</body>
+</html>
